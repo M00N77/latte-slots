@@ -4,7 +4,8 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN
-from handlers import start, add, view
+from db import init_db
+from handlers import start, menu, add, view, ads
 
 
 async def main():
@@ -12,10 +13,10 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(start.router)
+    dp.include_router(menu.router)
     dp.include_router(add.router)
     dp.include_router(view.router)
-
-    from db import init_db
+    dp.include_router(ads.router)
 
     await init_db()
 
