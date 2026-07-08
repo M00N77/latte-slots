@@ -40,3 +40,36 @@ async def create_meeting(title, organizer_id, user_ids, start_ts, end_ts):
             )
         await db.commit()
     return meeting_id
+
+
+async def get_meetings_between(start_ts, end_ts):
+    query = (
+        "SELECT m.id, m.title, m.start_ts, m.end_ts "
+        "FROM meetings m WHERE m.start_ts < ? AND m.end_ts > ? "
+        "ORDER BY m.start_ts"
+    )
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(query, (end_ts, start_ts))
+        return await cur.fetchall()
+
+
+async def get_attendee_names(meeting_id):
+    query = (
+        "SELECT u.name FROM attendees a "
+        "JOIN users u ON u.telegram_id = a.user_id WHERE a.meeting_id = ?"
+    )
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(query, (meeting_id,))
+        rows = await cur.fetchall()
+    return [r[0] for r in rows]
+
+
+async def get_user_meetings(user_id):
+    query = (
+        "SELECT m.id, m.title, m.start_ts, m.end_ts FROM meetings m "
+        "JOIN attendees a ON a.meeting_id = m.id WHERE a.user_id = ? "
+        "ORDER BY m.start_ts"
+    )
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(query, (user_id,))
+        return await cur.fetchall()
