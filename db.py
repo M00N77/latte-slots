@@ -12,13 +12,22 @@ async def init_db():
         await db.execute(
             "CREATE TABLE IF NOT EXISTS meetings ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, "
-            "organizer_id INTEGER NOT NULL, start_ts INTEGER NOT NULL, end_ts INTEGER NOT NULL)"
+            "organizer_id INTEGER NOT NULL, start_ts INTEGER NOT NULL, end_ts INTEGER NOT NULL, "
+            "link TEXT, reminded INTEGER DEFAULT 0)"
         )
         await db.execute(
             "CREATE TABLE IF NOT EXISTS attendees ("
             "meeting_id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
             "PRIMARY KEY (meeting_id, user_id))"
         )
+        for stmt in (
+            "ALTER TABLE meetings ADD COLUMN link TEXT",
+            "ALTER TABLE meetings ADD COLUMN reminded INTEGER DEFAULT 0",
+        ):
+            try:
+                await db.execute(stmt)
+            except Exception:
+                pass
         await db.commit()
 
 

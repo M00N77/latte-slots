@@ -21,11 +21,13 @@ async def render(meetings):
     if not meetings:
         return "Встреч нет."
     lines = []
-    for mid, title, start_ts, end_ts in meetings:
+    for row in meetings:
+        mid, title, start_ts, end_ts, link = row
         names = await svc.get_attendee_names(mid)
-        lines.append(
-            f"🕒 {fmt(start_ts)}–{fmt(end_ts)} | {title}\n   Участники: {', '.join(names)}"
-        )
+        block = f"🕒 {fmt(start_ts)}–{fmt(end_ts)} | {title}\n   Участники: {', '.join(names)}"
+        if link:
+            block += f"\n   🔗 {link}"
+        lines.append(block)
     return "\n\n".join(lines)
 
 

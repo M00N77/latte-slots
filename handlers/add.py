@@ -17,6 +17,7 @@ from services import meetings as svc
 from keyboards.calendar import build_calendar
 from keyboards.timepicker import hours_keyboard, minutes_keyboard
 from keyboards.menu import meetings_menu, cancel_kb
+from services.meeting_room import create_meeting_room
 
 router = Router()
 TZ = ZoneInfo(TIMEZONE)
@@ -174,7 +175,8 @@ async def _finalize(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
-    await svc.create_meeting(data["title"], callback.from_user.id, selected, start_ts, end_ts)
-    await callback.message.edit_text("Встреча сохранена ✅")
+    link = create_meeting_room(data["title"])
+    await svc.create_meeting(data["title"], callback.from_user.id, selected, start_ts, end_ts, link)
+    await callback.message.edit_text(f"Встреча сохранена ✅\n🔗 Ссылка на видеовстречу:\n{link}")
     await callback.message.answer("Меню встреч:", reply_markup=meetings_menu())
     await state.clear()
