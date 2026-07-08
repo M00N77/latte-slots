@@ -14,6 +14,9 @@ from aiogram.types import (
 from config import TIMEZONE
 from states import AddMeeting
 from services import meetings as svc
+from keyboards.calendar import build_calendar
+from keyboards.timepicker import hours_keyboard, minutes_keyboard
+from keyboards.menu import meetings_menu, cancel_kb
 
 router = Router()
 TZ = ZoneInfo(TIMEZONE)
@@ -24,14 +27,25 @@ def participants_keyboard(users, selected):
     for uid, name in users:
         mark = "✅ " if uid in selected else ""
         rows.append([InlineKeyboardButton(text=f"{mark}{name}", callback_data=f"p:{uid}")])
-    rows.append([InlineKeyboardButton(text="Готово", callback_data="p:done")])
+    rows.append([InlineKeyboardButton(text="Готово ✅", callback_data="p:done")])
+    rows.append([InlineKeyboardButton(text="✖️ Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-@router.message(Command("add"))
-async def add_start(message: Message, state: FSMContext):
+async def _ask_title(target_message, state):
     await state.set_state(AddMeeting.title)
-    await message.answer("Название встречи (или '-' если без названия):")
+    await target_message.answer("Название встречи (или '-' если без названия):", reply_markup=cancel_kb())
+
+
+@router.callback_query(F.data == "mtg:add")
+async def add_from_menu(callback: CallbackQuery, state: FSMContext):
+    await _ask_title(callback.message, state)
+    await callback.answer()
+
+
+@router.message(Command("add"))
+async def add_from_cmd(message: Message, state: FSMContext):
+    await _ask_title(message, state)
 
 
 @router.message(AddMeeting.title)
@@ -58,7 +72,8 @@ async def add_participants(callback: CallbackQuery, state: FSMContext):
             await callback.answer("Выбери хотя бы одного участника", show_alert=True)
             return
         await state.set_state(AddMeeting.date)
-        await callback.message.answer("Дата встречи в формате ГГГГ-ММ-ДД:")
+        now = datetime.now(TZ)
+        await callback.message.answer("Выбери дату встречи:", reply_markup=build_calendar(now.year, now.month))
         await callback.answer()
         return
     uid = int(action)
@@ -69,74 +84,97 @@ async def add_participants(callback: CallbackQuery, state: FSMContext):
         selected.append(uid)
     await state.update_data(selected=selected)
     users = await svc.get_registered_users()
-    await callback.message.edit_reply_markup(
-        reply_markup=participants_keyboard(users, selected)
-    )
+    await callback.message.edit_reply_markup(reply_markup=participants_keyboard(users, selected))
     await callback.answer()
 
 
-@router.message(AddMeeting.date)
-async def add_date(message: Message, state: FSMContext):
-    try:
-        datetime.strptime(message.text.strip(), "%Y-%m-%d")
-    except ValueError:
-        await message.answer("Неверный формат. Введи дату как ГГГГ-ММ-ДД:")
-        return
-    await state.update_data(date=message.text.strip())
+@router.callback_query(F.data == "cal:ignore")
+async def cal_ignore(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(AddMeeting.date, F.data.startswith("cal:nav:"))
+async def cal_nav(callback: CallbackQuery, state: FSMContext):
+    ym = callback.data.split(":")[2]
+    year, month = ym.split("-")
+    await callback.message.edit_reply_markup(reply_markup=build_calendar(int(year), int(month)))
+    await callback.answer()
+
+
+@router.callback_query(AddMeeting.date, F.data.startswith("cal:day:"))
+async def cal_day(callback: CallbackQuery, state: FSMContext):
+    picked = callback.data.split(":", 2)[2]
+    await state.update_data(date=picked)
     await state.set_state(AddMeeting.start_time)
-    await message.answer("Время начала в формате ЧЧ:ММ:")
+    await callback.message.answer("Выбери ЧАС начала:", reply_markup=hours_keyboard())
+    await callback.answer()
 
 
-@router.message(AddMeeting.start_time)
-async def add_start_time(message: Message, state: FSMContext):
-    try:
-        datetime.strptime(message.text.strip(), "%H:%M")
-    except ValueError:
-        await message.answer("Неверный формат. Введи время как ЧЧ:ММ:")
+@router.callback_query(F.data.startswith("time:h:"))
+async def pick_hour(callback: CallbackQuery, state: FSMContext):
+    hour = callback.data.split(":")[2]
+    await state.update_data(temp_hour=hour)
+    await callback.message.edit_text(f"Час {hour} выбран. Выбери минуты:", reply_markup=minutes_keyboard(hour))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("time:m:"))
+async def pick_minute(callback: CallbackQuery, state: FSMContext):
+    minute = callback.data.split(":")[2]
+    data = await state.get_data()
+    hour = data.get("temp_hour", "00")
+    time_str = f"{hour}:{minute}"
+    current = await state.get_state()
+    if current == AddMeeting.start_time.state:
+        await state.update_data(start_time=time_str)
+        await state.set_state(AddMeeting.end_time)
+        await callback.message.edit_text("Выбери ЧАС окончания:", reply_markup=hours_keyboard())
+        await callback.answer()
         return
-    await state.update_data(start_time=message.text.strip())
-    await state.set_state(AddMeeting.end_time)
-    await message.answer("Время окончания в формате ЧЧ:ММ:")
+    await state.update_data(end_time=time_str)
+    await _finalize(callback, state)
+    await callback.answer()
 
 
-@router.message(AddMeeting.end_time)
-async def add_end_time(message: Message, state: FSMContext):
-    try:
-        datetime.strptime(message.text.strip(), "%H:%M")
-    except ValueError:
-        await message.answer("Неверный формат. Введи время как ЧЧ:ММ:")
-        return
+async def _finalize(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     start_dt = datetime.strptime(
         f"{data['date']} {data['start_time']}", "%Y-%m-%d %H:%M"
     ).replace(tzinfo=TZ)
     end_dt = datetime.strptime(
-        f"{data['date']} {message.text.strip()}", "%Y-%m-%d %H:%M"
+        f"{data['date']} {data['end_time']}", "%Y-%m-%d %H:%M"
     ).replace(tzinfo=TZ)
     start_ts = int(start_dt.timestamp())
     end_ts = int(end_dt.timestamp())
-    from datetime import datetime as _now_dt
 
-    if start_ts < int(_now_dt.now(TZ).timestamp()):
-        await message.answer("Нельзя создать встречу в прошлом. Начни заново: /add")
+    if start_ts < int(datetime.now(TZ).timestamp()):
+        await callback.message.edit_text("Нельзя создать встречу в прошлом.")
+        await callback.message.answer("Меню встреч:", reply_markup=meetings_menu())
         await state.clear()
         return
+
     if end_ts <= start_ts:
-        await message.answer("Окончание должно быть позже начала. Введи время окончания заново:")
+        await state.set_state(AddMeeting.end_time)
+        await callback.message.edit_text(
+            "Окончание должно быть позже начала. Выбери ЧАС окончания заново:",
+            reply_markup=hours_keyboard(),
+        )
         return
+
     selected = data["selected"]
     conflicts = await svc.has_conflict(selected, start_ts, end_ts)
     if conflicts:
-        from datetime import datetime as _dt
-
         lines = []
         for c in conflicts:
-            c_start = _dt.fromtimestamp(c[3], TZ).strftime("%d.%m %H:%M")
-            c_end = _dt.fromtimestamp(c[4], TZ).strftime("%H:%M")
+            c_start = datetime.fromtimestamp(c[3], TZ).strftime("%d.%m %H:%M")
+            c_end = datetime.fromtimestamp(c[4], TZ).strftime("%H:%M")
             lines.append(f"— {c[1]} занят(а) во встрече «{c[2]}» ({c_start}–{c_end})")
-        await message.answer("Не могу сохранить, есть пересечения:\n" + "\n".join(lines))
+        await callback.message.edit_text("Не могу сохранить, есть пересечения:\n" + "\n".join(lines))
+        await callback.message.answer("Меню встреч:", reply_markup=meetings_menu())
         await state.clear()
         return
-    await svc.create_meeting(data["title"], message.from_user.id, selected, start_ts, end_ts)
-    await message.answer("Встреча сохранена ✅")
+
+    await svc.create_meeting(data["title"], callback.from_user.id, selected, start_ts, end_ts)
+    await callback.message.edit_text("Встреча сохранена ✅")
+    await callback.message.answer("Меню встреч:", reply_markup=meetings_menu())
     await state.clear()
