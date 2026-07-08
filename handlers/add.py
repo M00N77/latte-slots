@@ -118,7 +118,13 @@ async def add_end_time(message: Message, state: FSMContext):
     selected = data["selected"]
     conflicts = await svc.has_conflict(selected, start_ts, end_ts)
     if conflicts:
-        lines = [f"— {c[1]} занят(а) во встрече «{c[2]}»" for c in conflicts]
+        from datetime import datetime as _dt
+
+        lines = []
+        for c in conflicts:
+            c_start = _dt.fromtimestamp(c[3], TZ).strftime("%d.%m %H:%M")
+            c_end = _dt.fromtimestamp(c[4], TZ).strftime("%H:%M")
+            lines.append(f"— {c[1]} занят(а) во встрече «{c[2]}» ({c_start}–{c_end})")
         await message.answer("Не могу сохранить, есть пересечения:\n" + "\n".join(lines))
         await state.clear()
         return
