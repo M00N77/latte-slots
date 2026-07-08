@@ -54,6 +54,9 @@ async def add_participants(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     selected = data.get("selected", [])
     if action == "done":
+        if not selected:
+            await callback.answer("Выбери хотя бы одного участника", show_alert=True)
+            return
         await state.set_state(AddMeeting.date)
         await callback.message.answer("Дата встречи в формате ГГГГ-ММ-ДД:")
         await callback.answer()
@@ -112,6 +115,12 @@ async def add_end_time(message: Message, state: FSMContext):
     ).replace(tzinfo=TZ)
     start_ts = int(start_dt.timestamp())
     end_ts = int(end_dt.timestamp())
+    from datetime import datetime as _now_dt
+
+    if start_ts < int(_now_dt.now(TZ).timestamp()):
+        await message.answer("Нельзя создать встречу в прошлом. Начни заново: /add")
+        await state.clear()
+        return
     if end_ts <= start_ts:
         await message.answer("Окончание должно быть позже начала. Введи время окончания заново:")
         return
