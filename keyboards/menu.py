@@ -20,6 +20,8 @@ def meetings_menu():
 
 def ads_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📥 Загрузить отчёт (CSV)", callback_data="ads:upload")],
+        [InlineKeyboardButton(text="🧪 Демо-анализ", callback_data="ads:demo")],
         [InlineKeyboardButton(text="ℹ️ О разделе", callback_data="ads:info")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="nav:main")],
     ])

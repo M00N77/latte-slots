@@ -7,3 +7,7 @@ class AddMeeting(StatesGroup):
     date = State()
     start_time = State()
     end_time = State()
+
+
+class AdsAnalysis(StatesGroup):
+    waiting_file = State()
