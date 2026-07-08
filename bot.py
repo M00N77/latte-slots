@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from config import BOT_TOKEN
 from db import init_db
 from handlers import start, menu, add, view, ads
+from services.reminders import reminder_loop
 
 
 async def main():
@@ -19,6 +20,8 @@ async def main():
     dp.include_router(ads.router)
 
     await init_db()
+
+    asyncio.create_task(reminder_loop(bot))
 
     await dp.start_polling(bot)
 
