@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from config import BOT_TOKEN
-from handlers import start
+from handlers import start, add
 
 
 async def main():
@@ -12,6 +12,7 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(start.router)
+    dp.include_router(add.router)
 
     from db import init_db
 
