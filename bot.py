@@ -12,6 +12,11 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(start.router)
+
+    from db import init_db
+
+    await init_db()
+
     await dp.start_polling(bot)
 
 

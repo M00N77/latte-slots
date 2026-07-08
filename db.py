@@ -1,0 +1,32 @@
+import aiosqlite
+
+DB_PATH = "meetings.db"
+
+
+async def init_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS users ("
+            "telegram_id INTEGER PRIMARY KEY, name TEXT, username TEXT)"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS meetings ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, "
+            "organizer_id INTEGER NOT NULL, start_ts INTEGER NOT NULL, end_ts INTEGER NOT NULL)"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS attendees ("
+            "meeting_id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
+            "PRIMARY KEY (meeting_id, user_id))"
+        )
+        await db.commit()
+
+
+async def upsert_user(telegram_id, name, username):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO users (telegram_id, name, username) VALUES (?, ?, ?) "
+            "ON CONFLICT(telegram_id) DO UPDATE SET name=excluded.name, username=excluded.username",
+            (telegram_id, name, username),
+        )
+        await db.commit()
